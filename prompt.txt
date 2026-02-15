@@ -1,0 +1,43 @@
+Act as an expert Java software engineer. Create a professional REST API Client application using Java Swing. The application should be a desktop tool similar to Postman or Insomnia, designed for testing and debugging REST APIs.
+
+### Core Features:
+- **Intuitive GUI**: A clean, modern layout using `BorderLayout` and `JSplitPane`. Use `TitledBorder` for distinct sections.
+- **Request Configuration**:
+    - **Header Bar**: A dropdown (`JComboBox`) for selecting HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS) and a `JTextField` for the URL.
+    - **Buttons**: A "Send" button to execute the request and a "Save" button to bookmark requests with a custom description.
+    - **Tabs**: A `JTabbedPane` for:
+        - **Params**: Editable table (`JTable`) for Query Parameters.
+        - **Headers**: Editable table (`JTable`) for Request Headers.
+        - **Body**: A code-friendly `JTextArea` for raw request payloads (JSON).
+- **Execution & Response**:
+    - **Async Processing**: Use `SwingWorker` to perform network requests in the background, keeping the UI responsive.
+    - **Status & Info**: Display the HTTP status code (with color-coded text: green for success, red for errors) and the response time in milliseconds.
+    - **Response Tabs**:
+        - **Body**: Read-only `JTextArea` displaying the response content. Implement a custom JSON formatter to pretty-print JSON responses.
+        - **Headers**: Read-only `JTextArea` listing all response headers.
+    - **Utilities**: Include a "Copy Response" button to copy the body to the system clipboard.
+
+- **Request Management & History**:
+    - **Saved Requests Management**: A panel above the history containing a dropdown and management buttons.
+        - **Dropdown**: Lists all user-saved requests. Selecting one populates the request editor and switches the history view to that specific request's executions.
+        - **"--- All History ---"**: A special entry in the dropdown to view the global execution log.
+        - **Edit Button**: Allows renaming/editing the description of a saved request.
+        - **Delete Button**: Removes a saved request and its associated history.
+    - **Per-Request History**: Each saved request maintains its own isolated list of past executions.
+    - **History List**: Displays the execution log (global or local depending on the active saved request context). Selecting an item from the list reloads that specific execution's parameters.
+    - **Management**: A button to "Remove Selected" items from the history view.
+
+### Technical Implementation Details:
+- **Networking**: Use `HttpURLConnection` for standard HTTP operations. Handle input/error streams and URL encoding for parameters.
+- **Data Modeling**: Use a `RequestData` class to store:
+    - Method, URL, Headers, Params, Body.
+    - Description (for saved requests).
+    - `List<RequestData> executionHistory` for isolated tracking.
+- **Formatting**: Implement a robust JSON formatting algorithm to handle nested objects and arrays with indentation.
+- **Error Handling**: Gracefully catch and display connection errors or malformed URLs.
+- **Look and Feel**: Set the system Look and Feel using `UIManager.getSystemLookAndFeelClassName()`.
+
+### Project Structure:
+- Use a single main class `RestApiTester` that extends `JFrame`.
+- Coordinate state between the `Saved Requests` dropdown and the `History` list model.
+- Follow standard Swing event-driven patterns and layout management.
