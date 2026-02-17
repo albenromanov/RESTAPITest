@@ -4,10 +4,12 @@ Act as an expert Java software engineer. Create a professional REST API Client a
 - **Intuitive GUI**: A clean, modern layout using `BorderLayout` and `JSplitPane`. Use `TitledBorder` for distinct sections.
 - **Request Configuration**:
     - **Header Bar**: A dropdown (`JComboBox`) for selecting HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS) and a `JTextField` for the URL.
-    - **Buttons**: A "Send" button to execute the request and a "Save" button to bookmark requests with a custom description.
+    - **Buttons**: A "Send" button to execute the request, a "Save" button to bookmark requests, and a "cURL" button to copy the request as a shell command.
     - **Tabs**: A `JTabbedPane` for:
         - **Params**: Editable table (`JTable`) for Query Parameters.
         - **Headers**: Editable table (`JTable`) for Request Headers.
+        - **Auth**: A section to configure authentication (Basic Auth, Bearer Token) with a `CardLayout` for dynamic configuration.
+        - **Env**: Editable table (`JTable`) for Environment Variables.
         - **Body**: A code-friendly `JTextArea` for raw request payloads (JSON).
 - **Execution & Response**:
     - **Async Processing**: Use `SwingWorker` to perform network requests in the background, keeping the UI responsive.
@@ -29,8 +31,10 @@ Act as an expert Java software engineer. Create a professional REST API Client a
 
 ### Technical Implementation Details:
 - **Networking**: Use `HttpURLConnection` for standard HTTP operations. Handle input/error streams and URL encoding for parameters.
+- **Variable Substitution**: Implement a `resolveVariables` method to substitute `{{key}}` placeholders in URL, headers, and body with values defined in the Environment tab.
 - **Data Modeling**: Use a `RequestData` class to store:
     - Method, URL, Headers, Params, Body.
+    - Auth configuration (type, username, password, token).
     - Description (for saved requests).
     - `List<RequestData> executionHistory` for isolated tracking.
 - **Formatting**: Implement a robust JSON formatting algorithm to handle nested objects and arrays with indentation.

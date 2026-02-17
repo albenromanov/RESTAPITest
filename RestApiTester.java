@@ -33,22 +33,42 @@ public class RestApiTester extends JFrame {
     private DefaultComboBoxModel<RequestData> savedRequestsModel;
     private List<RequestData> requestHistory = new ArrayList<>();
 
+    // Auth components
+    private JComboBox<String> authTypeCombo;
+    private JTextField authUsernameField;
+    private JPasswordField authPasswordField;
+    private JTextField authTokenField;
+    private CardLayout authCardLayout;
+    private JPanel authConfigPanel;
+
+    // Environment components
+    private JTable envTable;
+    private DefaultTableModel envModel;
+
     private static class RequestData {
         String method;
         String url;
         Map<String, String> headers;
         Map<String, String> params;
         String body;
+        String authType;
+        String authUser;
+        String authPass;
+        String authToken;
         String description;
         List<RequestData> executionHistory = new ArrayList<>();
 
         RequestData(String method, String url, Map<String, String> headers, Map<String, String> params, String body,
-                String description) {
+                String authType, String authUser, String authPass, String authToken, String description) {
             this.method = method;
             this.url = url;
             this.headers = new HashMap<>(headers);
             this.params = new HashMap<>(params);
             this.body = body;
+            this.authType = authType;
+            this.authUser = authUser;
+            this.authPass = authPass;
+            this.authToken = authToken;
             this.description = description;
         }
 
@@ -64,7 +84,7 @@ public class RestApiTester extends JFrame {
     }
 
     private RequestData allHistoryStub = new RequestData("", "", Collections.emptyMap(), Collections.emptyMap(), "",
-            "--- All History ---");
+            "None", "", "", "", "--- All History ---");
     private RequestData activeSavedRequest = null;
 
     public RestApiTester() {
@@ -165,7 +185,13 @@ public class RestApiTester extends JFrame {
         saveButton.setFocusPainted(false);
         saveButton.addActionListener(e -> saveCurrentRequest());
 
+        JButton curlButton = new JButton("cURL");
+        curlButton.setPreferredSize(new Dimension(80, 30));
+        curlButton.setFocusPainted(false);
+        curlButton.addActionListener(e -> copyAsCurl());
+
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        buttonPanel.add(curlButton);
         buttonPanel.add(saveButton);
         buttonPanel.add(sendButton);
 
@@ -214,9 +240,86 @@ public class RestApiTester extends JFrame {
         JScrollPane bodyScroll = new JScrollPane(requestBodyArea);
         bodyPanel.add(bodyScroll, BorderLayout.CENTER);
 
+        // Auth Tab
+        JPanel authPanel = new JPanel(new BorderLayout(10, 10));
+        authPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        JPanel typePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        typePanel.add(new JLabel("Auth Type:"));
+        authTypeCombo = new JComboBox<>(new String[] { "None", "Basic Auth", "Bearer Token" });
+        authTypeCombo.addActionListener(e -> {
+            authCardLayout.show(authConfigPanel, (String) authTypeCombo.getSelectedItem());
+        });
+        typePanel.add(authTypeCombo);
+        authPanel.add(typePanel, BorderLayout.NORTH);
+
+        authCardLayout = new CardLayout();
+        authConfigPanel = new JPanel(authCardLayout);
+
+        // None panel
+        authConfigPanel.add(new JPanel(), "None");
+
+        // Basic Auth panel
+        JPanel basicPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        basicPanel.add(new JLabel("Username:"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        authUsernameField = new JTextField();
+        basicPanel.add(authUsernameField, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.weightx = 0;
+        basicPanel.add(new JLabel("Password:"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        authPasswordField = new JPasswordField();
+        basicPanel.add(authPasswordField, gbc);
+
+        authConfigPanel.add(basicPanel, "Basic Auth");
+
+        // Bearer Token panel
+        JPanel bearerPanel = new JPanel(new GridBagLayout());
+        gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        bearerPanel.add(new JLabel("Token:"), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        authTokenField = new JTextField();
+        bearerPanel.add(authTokenField, gbc);
+
+        authConfigPanel.add(bearerPanel, "Bearer Token");
+
+        authPanel.add(authConfigPanel, BorderLayout.CENTER);
+
+        // Environment Tab
+        JPanel envPanel = new JPanel(new BorderLayout());
+        envModel = new DefaultTableModel(new String[] { "Key", "Value" }, 5);
+        envTable = new JTable(envModel);
+        envTable.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        envPanel.add(new JScrollPane(envTable), BorderLayout.CENTER);
+
+        JButton addEnvButton = new JButton("Add Variable");
+        addEnvButton.addActionListener(e -> envModel.addRow(new Object[] { "", "" }));
+        JPanel envButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        envButtonPanel.add(addEnvButton);
+        envPanel.add(envButtonPanel, BorderLayout.SOUTH);
+
         requestTabs.addTab("Params", paramsPanel);
         requestTabs.addTab("Headers", headersPanel);
+        requestTabs.addTab("Auth", authPanel);
         requestTabs.addTab("Body", bodyPanel);
+        requestTabs.addTab("Env", envPanel);
 
         requestPanel.add(requestTabs, BorderLayout.CENTER);
 
@@ -300,10 +403,13 @@ public class RestApiTester extends JFrame {
             protected Void doInBackground() throws Exception {
                 long startTime = System.currentTimeMillis();
 
+                String resolvedUrl = resolveVariables(baseUrl);
+                String resolvedBody = resolveVariables(requestBodyArea.getText());
+
                 try {
                     // Build URL with query parameters
                     Map<String, String> params = getParams();
-                    StringBuilder urlBuilder = new StringBuilder(baseUrl);
+                    StringBuilder urlBuilder = new StringBuilder(resolvedUrl);
                     if (!params.isEmpty()) {
                         if (!baseUrl.contains("?")) {
                             urlBuilder.append("?");
@@ -327,7 +433,21 @@ public class RestApiTester extends JFrame {
                     // Set headers
                     Map<String, String> headers = getHeaders();
                     for (Map.Entry<String, String> entry : headers.entrySet()) {
-                        connection.setRequestProperty(entry.getKey(), entry.getValue());
+                        connection.setRequestProperty(resolveVariables(entry.getKey()),
+                                resolveVariables(entry.getValue()));
+                    }
+
+                    // Set Auth header if not explicitly overridden in Headers tab
+                    String authType = (String) authTypeCombo.getSelectedItem();
+                    if ("Basic Auth".equals(authType) && !headers.containsKey("Authorization")) {
+                        String user = authUsernameField.getText();
+                        String pass = new String(authPasswordField.getPassword());
+                        String auth = user + ":" + pass;
+                        String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes("UTF-8"));
+                        connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+                    } else if ("Bearer Token".equals(authType) && !headers.containsKey("Authorization")) {
+                        String token = authTokenField.getText();
+                        connection.setRequestProperty("Authorization", "Bearer " + token);
                     }
 
                     // Set request body for POST, PUT, PATCH
@@ -335,13 +455,13 @@ public class RestApiTester extends JFrame {
                     if (method.equals("POST") || method.equals("PUT") || method.equals("PATCH")) {
                         connection.setDoOutput(true);
 
-                        if (!requestBody.trim().isEmpty()) {
+                        if (!resolvedBody.trim().isEmpty()) {
                             if (!headers.containsKey("Content-Type")) {
                                 connection.setRequestProperty("Content-Type", "application/json");
                             }
 
                             try (OutputStream os = connection.getOutputStream()) {
-                                byte[] input = requestBody.getBytes("utf-8");
+                                byte[] input = resolvedBody.getBytes("utf-8");
                                 os.write(input, 0, input.length);
                             }
                         }
@@ -387,7 +507,13 @@ public class RestApiTester extends JFrame {
                     responseTime = System.currentTimeMillis() - startTime;
 
                     // Add to history
-                    SwingUtilities.invokeLater(() -> addToHistory(method, baseUrl, headers, params, requestBody, null));
+                    // Add to history
+                    String authUser = authUsernameField.getText();
+                    String authPass = new String(authPasswordField.getPassword());
+                    String authToken = authTokenField.getText();
+
+                    SwingUtilities.invokeLater(() -> addToHistory(method, baseUrl, headers, params, requestBody,
+                            authType, authUser, authPass, authToken, null));
 
                 } catch (Exception e) {
                     errorMessage = e.getMessage();
@@ -460,8 +586,9 @@ public class RestApiTester extends JFrame {
     }
 
     private void addToHistory(String method, String url, Map<String, String> headers, Map<String, String> params,
-            String body, String description) {
-        RequestData data = new RequestData(method, url, headers, params, body, description);
+            String body, String authType, String authUser, String authPass, String authToken, String description) {
+        RequestData data = new RequestData(method, url, headers, params, body, authType, authUser, authPass, authToken,
+                description);
 
         if (description != null) {
             // It's a saved request
@@ -498,8 +625,12 @@ public class RestApiTester extends JFrame {
             Map<String, String> headers = getHeaders();
             Map<String, String> params = getParams();
             String body = requestBodyArea.getText();
+            String authType = (String) authTypeCombo.getSelectedItem();
+            String authUser = authUsernameField.getText();
+            String authPass = new String(authPasswordField.getPassword());
+            String authToken = authTokenField.getText();
 
-            addToHistory(method, url, headers, params, body, description);
+            addToHistory(method, url, headers, params, body, authType, authUser, authPass, authToken, description);
         }
     }
 
@@ -537,6 +668,13 @@ public class RestApiTester extends JFrame {
         }
 
         requestBodyArea.setText(data.body);
+
+        // Load auth
+        authTypeCombo.setSelectedItem(data.authType != null ? data.authType : "None");
+        authUsernameField.setText(data.authUser != null ? data.authUser : "");
+        authPasswordField.setText(data.authPass != null ? data.authPass : "");
+        authTokenField.setText(data.authToken != null ? data.authToken : "");
+        authCardLayout.show(authConfigPanel, (String) authTypeCombo.getSelectedItem());
     }
 
     private void editSavedRequest() {
@@ -591,6 +729,44 @@ public class RestApiTester extends JFrame {
             }
         }
         savedRequestsCombo.setSelectedItem(currentSelected != null ? currentSelected : allHistoryStub);
+    }
+
+    private void copyAsCurl() {
+        String url = urlField.getText().trim();
+        if (url.isEmpty())
+            return;
+
+        String method = (String) methodCombo.getSelectedItem();
+        Map<String, String> headers = getHeaders();
+        String body = requestBodyArea.getText();
+
+        StringBuilder curl = new StringBuilder("curl -X ").append(method);
+
+        // Add headers
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            curl.append(" -H \"").append(entry.getKey()).append(": ").append(entry.getValue()).append("\"");
+        }
+
+        // Add Auth header if configured
+        String authType = (String) authTypeCombo.getSelectedItem();
+        if ("Basic Auth".equals(authType)) {
+            String user = authUsernameField.getText();
+            String pass = new String(authPasswordField.getPassword());
+            String auth = user + ":" + pass;
+            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
+            curl.append(" -H \"Authorization: Basic ").append(encodedAuth).append("\"");
+        } else if ("Bearer Token".equals(authType)) {
+            curl.append(" -H \"Authorization: Bearer ").append(authTokenField.getText()).append("\"");
+        }
+
+        // Add body
+        if (!body.trim().isEmpty() && (method.equals("POST") || method.equals("PUT") || method.equals("PATCH"))) {
+            curl.append(" -d '").append(body.replace("'", "'\\''")).append("'");
+        }
+
+        curl.append(" \"").append(url).append("\"");
+
+        copyToClipboard(curl.toString());
     }
 
     private void copyToClipboard(String text) {
@@ -663,6 +839,33 @@ public class RestApiTester extends JFrame {
         } catch (Exception e) {
             return json;
         }
+    }
+
+    private String resolveVariables(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+
+        Map<String, String> env = getEnvironment();
+        for (Map.Entry<String, String> entry : env.entrySet()) {
+            String placeholder = "{{" + entry.getKey() + "}}";
+            text = text.replace(placeholder, entry.getValue());
+        }
+        return text;
+    }
+
+    private Map<String, String> getEnvironment() {
+        Map<String, String> env = new HashMap<>();
+        if (envModel != null) {
+            for (int i = 0; i < envModel.getRowCount(); i++) {
+                String key = (String) envModel.getValueAt(i, 0);
+                String value = (String) envModel.getValueAt(i, 1);
+                if (key != null && !key.trim().isEmpty()) {
+                    env.put(key.trim(), value != null ? value.trim() : "");
+                }
+            }
+        }
+        return env;
     }
 
     private String getStatusText(int statusCode) {
