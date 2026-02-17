@@ -23,7 +23,16 @@ if [ $? -eq 0 ]; then
         
         # Build macOS .app bundle using jpackage
         echo "Creating macOS .app bundle..."
-        JPACKAGE_PATH="/opt/homebrew/Cellar/openjdk/25.0.2/libexec/openjdk.jdk/Contents/Home/bin/jpackage"
+        
+        # Try to find jpackage in the path first
+        JPACKAGE_PATH=$(which jpackage)
+        
+        # Fallback to a hardcoded path if not found in PATH
+        if [ -z "$JPACKAGE_PATH" ]; then
+            JPACKAGE_PATH="/opt/homebrew/Cellar/openjdk/25.0.2/libexec/openjdk.jdk/Contents/Home/bin/jpackage"
+        fi
+        
+        echo "Using jpackage from: $JPACKAGE_PATH"
         
         $JPACKAGE_PATH \
             --type app-image \
