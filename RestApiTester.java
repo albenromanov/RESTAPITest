@@ -166,7 +166,7 @@ public class RestApiTester extends JFrame {
 
         JPanel methodPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         methodPanel.add(new JLabel("Method:"));
-        String[] methods = { "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS" };
+        String[] methods = { "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE" };
         methodCombo = new JComboBox<>(methods);
         methodCombo.setPreferredSize(new Dimension(100, 30));
         methodPanel.add(methodCombo);
@@ -506,8 +506,6 @@ public class RestApiTester extends JFrame {
                     connection.disconnect();
                     responseTime = System.currentTimeMillis() - startTime;
 
-                    // Add to history
-                    // Add to history
                     String authUser = authUsernameField.getText();
                     String authPass = new String(authPasswordField.getPassword());
                     String authToken = authTokenField.getText();
@@ -804,31 +802,41 @@ public class RestApiTester extends JFrame {
             StringBuilder formatted = new StringBuilder();
             int indent = 0;
             boolean inString = false;
+            boolean justOpened = false;
 
             for (int i = 0; i < json.length(); i++) {
                 char c = json.charAt(i);
 
-                if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+                if (c == '"' && !isEscaped(json, i)) {
                     inString = !inString;
+                    formatted.append(c);
+                    continue;
                 }
 
                 if (!inString) {
                     if (c == '{' || c == '[') {
-                        formatted.append(c).append('\n');
+                        formatted.append(c);
                         indent++;
-                        formatted.append("  ".repeat(indent));
+                        justOpened = true;
                     } else if (c == '}' || c == ']') {
-                        formatted.append('\n');
                         indent--;
-                        formatted.append("  ".repeat(indent));
                         formatted.append(c);
                     } else if (c == ',') {
-                        formatted.append(c).append('\n');
-                        formatted.append("  ".repeat(indent));
+                        formatted.append(c);
+                        justOpened = false;
                     } else if (c == ':') {
                         formatted.append(c).append(' ');
-                    } else if (!Character.isWhitespace(c)) {
+                    } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                        // Skip whitespace outside strings
+                    } else {
                         formatted.append(c);
+                        justOpened = false;
+                    }
+
+                    if (!justOpened && (c == '{' || c == '[')) {
+                        formatted.append('\n').append("  ".repeat(indent));
+                    } else if (c == ',' || c == ':') {
+                        formatted.append(' ');
                     }
                 } else {
                     formatted.append(c);
@@ -839,6 +847,15 @@ public class RestApiTester extends JFrame {
         } catch (Exception e) {
             return json;
         }
+    }
+
+    private boolean isEscaped(String json, int index) {
+        if (index <= 0) return false;
+        int backslashCount = 0;
+        for (int i = index - 1; i >= 0 && json.charAt(i) == '\\'; i--) {
+            backslashCount++;
+        }
+        return backslashCount % 2 == 1;
     }
 
     private String resolveVariables(String text) {
