@@ -418,9 +418,9 @@ public class RestApiTester extends JFrame {
                         }
 
                         for (Map.Entry<String, String> entry : params.entrySet()) {
-                            urlBuilder.append(URLEncoder.encode(entry.getKey(), "UTF-8"))
+                            urlBuilder.append(URLEncoder.encode(resolveVariables(entry.getKey()), "UTF-8"))
                                     .append("=")
-                                    .append(URLEncoder.encode(entry.getValue(), "UTF-8"))
+                                    .append(URLEncoder.encode(resolveVariables(entry.getValue()), "UTF-8"))
                                     .append("&");
                         }
                         urlBuilder.setLength(urlBuilder.length() - 1); // Remove last &
@@ -428,7 +428,17 @@ public class RestApiTester extends JFrame {
 
                     URL apiUrl = new URL(urlBuilder.toString());
                     HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
-                    connection.setRequestMethod(method);
+
+                    if (method.equals("PATCH")) {
+                        try {
+                            connection.setRequestMethod("PATCH");
+                        } catch (Exception e) {
+                            connection.setRequestMethod("POST");
+                            connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
+                        }
+                    } else {
+                        connection.setRequestMethod(method);
+                    }
 
                     // Set headers
                     Map<String, String> headers = getHeaders();
@@ -800,62 +810,65 @@ public class RestApiTester extends JFrame {
 
         try {
             StringBuilder formatted = new StringBuilder();
-            int indent = 0;
+            int indentLevel = 0;
             boolean inString = false;
-            boolean justOpened = false;
+            boolean isEscaped = false;
 
             for (int i = 0; i < json.length(); i++) {
                 char c = json.charAt(i);
 
-                if (c == '"' && !isEscaped(json, i)) {
+                if (isEscaped) {
+                    formatted.append(c);
+                    isEscaped = false;
+                    continue;
+                }
+
+                if (c == '\\') {
+                    formatted.append(c);
+                    isEscaped = true;
+                    continue;
+                }
+
+                if (c == '"') {
                     inString = !inString;
                     formatted.append(c);
                     continue;
                 }
 
-                if (!inString) {
-                    if (c == '{' || c == '[') {
-                        formatted.append(c);
-                        indent++;
-                        justOpened = true;
-                    } else if (c == '}' || c == ']') {
-                        indent--;
-                        formatted.append(c);
-                    } else if (c == ',') {
-                        formatted.append(c);
-                        justOpened = false;
-                    } else if (c == ':') {
-                        formatted.append(c).append(' ');
-                    } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-                        // Skip whitespace outside strings
-                    } else {
-                        formatted.append(c);
-                        justOpened = false;
-                    }
+                if (inString) {
+                    formatted.append(c);
+                    continue;
+                }
 
-                    if (!justOpened && (c == '{' || c == '[')) {
-                        formatted.append('\n').append("  ".repeat(indent));
-                    } else if (c == ',' || c == ':') {
-                        formatted.append(' ');
-                    }
-                } else {
+                if (c == '{' || c == '[') {
+                    formatted.append(c).append('\n');
+                    indentLevel++;
+                    appendIndent(formatted, indentLevel);
+                } else if (c == '}' || c == ']') {
+                    formatted.append('\n');
+                    indentLevel--;
+                    appendIndent(formatted, indentLevel);
+                    formatted.append(c);
+                } else if (c == ',') {
+                    formatted.append(c).append('\n');
+                    appendIndent(formatted, indentLevel);
+                } else if (c == ':') {
+                    formatted.append(c).append(' ');
+                } else if (!Character.isWhitespace(c)) {
                     formatted.append(c);
                 }
             }
 
-            return formatted.toString();
+            return formatted.toString().trim();
         } catch (Exception e) {
             return json;
         }
     }
 
-    private boolean isEscaped(String json, int index) {
-        if (index <= 0) return false;
-        int backslashCount = 0;
-        for (int i = index - 1; i >= 0 && json.charAt(i) == '\\'; i--) {
-            backslashCount++;
+    private void appendIndent(StringBuilder sb, int count) {
+        for (int i = 0; i < count; i++) {
+            sb.append("  ");
         }
-        return backslashCount % 2 == 1;
     }
 
     private String resolveVariables(String text) {
