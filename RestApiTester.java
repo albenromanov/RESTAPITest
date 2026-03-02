@@ -411,16 +411,18 @@ public class RestApiTester extends JFrame {
                     Map<String, String> params = getParams();
                     StringBuilder urlBuilder = new StringBuilder(resolvedUrl);
                     if (!params.isEmpty()) {
-                        if (!baseUrl.contains("?")) {
+                        if (!resolvedUrl.contains("?")) {
                             urlBuilder.append("?");
-                        } else if (!baseUrl.endsWith("&") && !baseUrl.endsWith("?")) {
+                        } else if (!resolvedUrl.endsWith("&") && !resolvedUrl.endsWith("?")) {
                             urlBuilder.append("&");
                         }
 
                         for (Map.Entry<String, String> entry : params.entrySet()) {
-                            urlBuilder.append(URLEncoder.encode(entry.getKey(), "UTF-8"))
+                            String resolvedKey = resolveVariables(entry.getKey());
+                            String resolvedValue = resolveVariables(entry.getValue());
+                            urlBuilder.append(URLEncoder.encode(resolvedKey, "UTF-8"))
                                     .append("=")
-                                    .append(URLEncoder.encode(entry.getValue(), "UTF-8"))
+                                    .append(URLEncoder.encode(resolvedValue, "UTF-8"))
                                     .append("&");
                         }
                         urlBuilder.setLength(urlBuilder.length() - 1); // Remove last &
@@ -428,7 +430,17 @@ public class RestApiTester extends JFrame {
 
                     URL apiUrl = new URL(urlBuilder.toString());
                     HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
-                    connection.setRequestMethod(method);
+
+                    if ("PATCH".equals(method)) {
+                        try {
+                            connection.setRequestMethod("PATCH");
+                        } catch (Exception e) {
+                            connection.setRequestMethod("POST");
+                            connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
+                        }
+                    } else {
+                        connection.setRequestMethod(method);
+                    }
 
                     // Set headers
                     Map<String, String> headers = getHeaders();
@@ -730,39 +742,87 @@ public class RestApiTester extends JFrame {
     }
 
     private void copyAsCurl() {
-        String url = urlField.getText().trim();
-        if (url.isEmpty())
+        String baseUrl = urlField.getText().trim();
+        if (baseUrl.isEmpty())
             return;
 
         String method = (String) methodCombo.getSelectedItem();
         Map<String, String> headers = getHeaders();
+        Map<String, String> params = getParams();
         String body = requestBodyArea.getText();
+
+        String resolvedUrl = resolveVariables(baseUrl);
+        StringBuilder urlBuilder = new StringBuilder(resolvedUrl);
+        if (!params.isEmpty()) {
+            if (!resolvedUrl.contains("?")) {
+                urlBuilder.append("?");
+            } else if (!resolvedUrl.endsWith("&") && !resolvedUrl.endsWith("?")) {
+                urlBuilder.append("&");
+            }
+
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                try {
+                    String resolvedKey = resolveVariables(entry.getKey());
+                    String resolvedValue = resolveVariables(entry.getValue());
+                    urlBuilder.append(URLEncoder.encode(resolvedKey, "UTF-8"))
+                            .append("=")
+                            .append(URLEncoder.encode(resolvedValue, "UTF-8"))
+                            .append("&");
+                } catch (UnsupportedEncodingException e) {
+                }
+            }
+            urlBuilder.setLength(urlBuilder.length() - 1);
+        }
 
         StringBuilder curl = new StringBuilder("curl -X ").append(method);
 
         // Add headers
         for (Map.Entry<String, String> entry : headers.entrySet()) {
-            curl.append(" -H \"").append(entry.getKey()).append(": ").append(entry.getValue()).append("\"");
+            curl.append(" -H \"").append(resolveVariables(entry.getKey())).append(": ")
+                    .append(resolveVariables(entry.getValue())).append("\"");
         }
 
-        // Add Auth header if configured
+        // Add Auth header if configured and not already in headers
         String authType = (String) authTypeCombo.getSelectedItem();
-        if ("Basic Auth".equals(authType)) {
-            String user = authUsernameField.getText();
-            String pass = new String(authPasswordField.getPassword());
-            String auth = user + ":" + pass;
-            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
-            curl.append(" -H \"Authorization: Basic ").append(encodedAuth).append("\"");
-        } else if ("Bearer Token".equals(authType)) {
-            curl.append(" -H \"Authorization: Bearer ").append(authTokenField.getText()).append("\"");
+        boolean hasAuth = false;
+        for (String key : headers.keySet()) {
+            if (key.equalsIgnoreCase("Authorization")) {
+                hasAuth = true;
+                break;
+            }
+        }
+        if (!hasAuth) {
+            if ("Basic Auth".equals(authType)) {
+                try {
+                    String user = authUsernameField.getText();
+                    String pass = new String(authPasswordField.getPassword());
+                    String auth = user + ":" + pass;
+                    String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes("UTF-8"));
+                    curl.append(" -H \"Authorization: Basic ").append(encodedAuth).append("\"");
+                } catch (UnsupportedEncodingException e) {
+                }
+            } else if ("Bearer Token".equals(authType)) {
+                curl.append(" -H \"Authorization: Bearer ").append(authTokenField.getText()).append("\"");
+            }
         }
 
         // Add body
-        if (!body.trim().isEmpty() && (method.equals("POST") || method.equals("PUT") || method.equals("PATCH"))) {
-            curl.append(" -d '").append(body.replace("'", "'\\''")).append("'");
+        String resolvedBody = resolveVariables(body);
+        if (!resolvedBody.trim().isEmpty() && (method.equals("POST") || method.equals("PUT") || method.equals("PATCH"))) {
+            boolean hasContentType = false;
+            for (String key : headers.keySet()) {
+                if (key.equalsIgnoreCase("Content-Type")) {
+                    hasContentType = true;
+                    break;
+                }
+            }
+            if (!hasContentType) {
+                curl.append(" -H \"Content-Type: application/json\"");
+            }
+            curl.append(" -d '").append(resolvedBody.replace("'", "'\\''")).append("'");
         }
 
-        curl.append(" \"").append(url).append("\"");
+        curl.append(" \"").append(urlBuilder.toString()).append("\"");
 
         copyToClipboard(curl.toString());
     }
@@ -802,7 +862,6 @@ public class RestApiTester extends JFrame {
             StringBuilder formatted = new StringBuilder();
             int indent = 0;
             boolean inString = false;
-            boolean justOpened = false;
 
             for (int i = 0; i < json.length(); i++) {
                 char c = json.charAt(i);
@@ -816,27 +875,29 @@ public class RestApiTester extends JFrame {
                 if (!inString) {
                     if (c == '{' || c == '[') {
                         formatted.append(c);
-                        indent++;
-                        justOpened = true;
+                        int next = findNextNonWhitespace(json, i + 1);
+                        if (next != -1 && isClosing(json.charAt(next), c)) {
+                            formatted.append(json.charAt(next));
+                            i = next;
+                        } else {
+                            formatted.append('\n');
+                            indent++;
+                            formatted.append(repeatString("  ", indent));
+                        }
                     } else if (c == '}' || c == ']') {
+                        formatted.append('\n');
                         indent--;
+                        formatted.append(repeatString("  ", indent));
                         formatted.append(c);
                     } else if (c == ',') {
-                        formatted.append(c);
-                        justOpened = false;
+                        formatted.append(c).append('\n');
+                        formatted.append(repeatString("  ", indent));
                     } else if (c == ':') {
                         formatted.append(c).append(' ');
-                    } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                    } else if (Character.isWhitespace(c)) {
                         // Skip whitespace outside strings
                     } else {
                         formatted.append(c);
-                        justOpened = false;
-                    }
-
-                    if (!justOpened && (c == '{' || c == '[')) {
-                        formatted.append('\n').append("  ".repeat(indent));
-                    } else if (c == ',' || c == ':') {
-                        formatted.append(' ');
                     }
                 } else {
                     formatted.append(c);
@@ -847,6 +908,27 @@ public class RestApiTester extends JFrame {
         } catch (Exception e) {
             return json;
         }
+    }
+
+    private int findNextNonWhitespace(String json, int start) {
+        for (int i = start; i < json.length(); i++) {
+            if (!Character.isWhitespace(json.charAt(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private boolean isClosing(char close, char open) {
+        return (open == '{' && close == '}') || (open == '[' && close == ']');
+    }
+
+    private String repeatString(String s, int count) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            sb.append(s);
+        }
+        return sb.toString();
     }
 
     private boolean isEscaped(String json, int index) {
