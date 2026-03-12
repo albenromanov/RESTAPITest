@@ -8,10 +8,12 @@ import java.awt.event.*;
 import java.awt.datatransfer.StringSelection;
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.*;
 import java.util.List;
+import java.util.Arrays;
 
 public class RestApiTester extends JFrame {
     private JComboBox<String> methodCombo;
@@ -169,6 +171,7 @@ public class RestApiTester extends JFrame {
         String[] methods = { "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE" };
         methodCombo = new JComboBox<>(methods);
         methodCombo.setPreferredSize(new Dimension(100, 30));
+        methodCombo.addActionListener(e -> updateBodyTabState());
         methodPanel.add(methodCombo);
 
         urlField = new JTextField();
@@ -385,6 +388,13 @@ public class RestApiTester extends JFrame {
             return;
         }
 
+        // Validate URL format
+        if (!isValidUrl(baseUrl)) {
+            JOptionPane.showMessageDialog(this, "Invalid URL format. Please enter a valid URL (e.g., https://example.com)",
+                    "Invalid URL", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
         // Clear previous response
         responseArea.setText("Sending request...");
         responseHeadersArea.setText("");
@@ -439,15 +449,23 @@ public class RestApiTester extends JFrame {
 
                     // Set Auth header if not explicitly overridden in Headers tab
                     String authType = (String) authTypeCombo.getSelectedItem();
-                    if ("Basic Auth".equals(authType) && !headers.containsKey("Authorization")) {
-                        String user = authUsernameField.getText();
-                        String pass = new String(authPasswordField.getPassword());
-                        String auth = user + ":" + pass;
-                        String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes("UTF-8"));
-                        connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
-                    } else if ("Bearer Token".equals(authType) && !headers.containsKey("Authorization")) {
-                        String token = authTokenField.getText();
-                        connection.setRequestProperty("Authorization", "Bearer " + token);
+                    char[] passwordChars = null;
+                    try {
+                        if ("Basic Auth".equals(authType) && !headers.containsKey("Authorization")) {
+                            String user = authUsernameField.getText();
+                            passwordChars = authPasswordField.getPassword();
+                            String auth = user + ":" + new String(passwordChars);
+                            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes("UTF-8"));
+                            connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+                        } else if ("Bearer Token".equals(authType) && !headers.containsKey("Authorization")) {
+                            String token = authTokenField.getText();
+                            connection.setRequestProperty("Authorization", "Bearer " + token);
+                        }
+                    } finally {
+                        // Clear sensitive password from memory
+                        if (passwordChars != null) {
+                            Arrays.fill(passwordChars, '\0');
+                        }
                     }
 
                     // Set request body for POST, PUT, PATCH
@@ -507,8 +525,12 @@ public class RestApiTester extends JFrame {
                     responseTime = System.currentTimeMillis() - startTime;
 
                     String authUser = authUsernameField.getText();
-                    String authPass = new String(authPasswordField.getPassword());
+                    char[] authPassChars = authPasswordField.getPassword();
+                    String authPass = new String(authPassChars);
                     String authToken = authTokenField.getText();
+
+                    // Clear sensitive password from memory immediately after use
+                    Arrays.fill(authPassChars, '\0');
 
                     SwingUtilities.invokeLater(() -> addToHistory(method, baseUrl, headers, params, requestBody,
                             authType, authUser, authPass, authToken, null));
@@ -557,11 +579,19 @@ public class RestApiTester extends JFrame {
         Map<String, String> headers = new HashMap<>();
 
         for (int i = 0; i < headersModel.getRowCount(); i++) {
-            String key = (String) headersModel.getValueAt(i, 0);
-            String value = (String) headersModel.getValueAt(i, 1);
+            Object keyObj = headersModel.getValueAt(i, 0);
+            Object valueObj = headersModel.getValueAt(i, 1);
 
-            if (key != null && !key.trim().isEmpty() && value != null && !value.trim().isEmpty()) {
-                headers.put(key.trim(), value.trim());
+            // Skip null or empty rows defensively
+            if (keyObj == null || valueObj == null) {
+                continue;
+            }
+
+            String key = keyObj.toString().trim();
+            String value = valueObj.toString().trim();
+
+            if (!key.isEmpty() && !value.isEmpty()) {
+                headers.put(key, value);
             }
         }
 
@@ -572,11 +602,19 @@ public class RestApiTester extends JFrame {
         Map<String, String> params = new HashMap<>();
 
         for (int i = 0; i < paramsModel.getRowCount(); i++) {
-            String key = (String) paramsModel.getValueAt(i, 0);
-            String value = (String) paramsModel.getValueAt(i, 1);
+            Object keyObj = paramsModel.getValueAt(i, 0);
+            Object valueObj = paramsModel.getValueAt(i, 1);
 
-            if (key != null && !key.trim().isEmpty() && value != null && !value.trim().isEmpty()) {
-                params.put(key.trim(), value.trim());
+            // Skip null or empty rows defensively
+            if (keyObj == null || valueObj == null) {
+                continue;
+            }
+
+            String key = keyObj.toString().trim();
+            String value = valueObj.toString().trim();
+
+            if (!key.isEmpty() && !value.isEmpty()) {
+                params.put(key, value);
             }
         }
 
@@ -747,14 +785,22 @@ public class RestApiTester extends JFrame {
 
         // Add Auth header if configured
         String authType = (String) authTypeCombo.getSelectedItem();
-        if ("Basic Auth".equals(authType)) {
-            String user = authUsernameField.getText();
-            String pass = new String(authPasswordField.getPassword());
-            String auth = user + ":" + pass;
-            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
-            curl.append(" -H \"Authorization: Basic ").append(encodedAuth).append("\"");
-        } else if ("Bearer Token".equals(authType)) {
-            curl.append(" -H \"Authorization: Bearer ").append(authTokenField.getText()).append("\"");
+        char[] passwordChars = null;
+        try {
+            if ("Basic Auth".equals(authType)) {
+                String user = authUsernameField.getText();
+                passwordChars = authPasswordField.getPassword();
+                String auth = user + ":" + new String(passwordChars);
+                String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
+                curl.append(" -H \"Authorization: Basic ").append(encodedAuth).append("\"");
+            } else if ("Bearer Token".equals(authType)) {
+                curl.append(" -H \"Authorization: Bearer ").append(authTokenField.getText()).append("\"");
+            }
+        } finally {
+            // Clear sensitive password from memory
+            if (passwordChars != null) {
+                Arrays.fill(passwordChars, '\0');
+            }
         }
 
         // Add body
@@ -875,14 +921,58 @@ public class RestApiTester extends JFrame {
         Map<String, String> env = new HashMap<>();
         if (envModel != null) {
             for (int i = 0; i < envModel.getRowCount(); i++) {
-                String key = (String) envModel.getValueAt(i, 0);
-                String value = (String) envModel.getValueAt(i, 1);
-                if (key != null && !key.trim().isEmpty()) {
-                    env.put(key.trim(), value != null ? value.trim() : "");
+                Object keyObj = envModel.getValueAt(i, 0);
+                Object valueObj = envModel.getValueAt(i, 1);
+
+                // Skip null rows defensively
+                if (keyObj == null) {
+                    continue;
+                }
+
+                String key = keyObj.toString().trim();
+                if (!key.isEmpty()) {
+                    String value = (valueObj != null) ? valueObj.toString().trim() : "";
+                    env.put(key, value);
                 }
             }
         }
         return env;
+    }
+
+    private boolean isValidUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return false;
+        }
+
+        try {
+            URL parsedUrl = new URL(url);
+            String protocol = parsedUrl.getProtocol();
+            // Must have http or https protocol
+            if (protocol == null || (!protocol.equalsIgnoreCase("http") && !protocol.equalsIgnoreCase("https"))) {
+                return false;
+            }
+            // Host must not be empty
+            if (parsedUrl.getHost() == null || parsedUrl.getHost().isEmpty()) {
+                return false;
+            }
+            return true;
+        } catch (MalformedURLException e) {
+            return false;
+        }
+    }
+
+    private void updateBodyTabState() {
+        String method = (String) methodCombo.getSelectedItem();
+        // Methods that support request body
+        boolean supportsBody = "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method);
+
+        // Body tab is at index 3 (Params=0, Headers=1, Auth=2, Body=3, Env=4)
+        requestTabs.setEnabledAt(3, supportsBody);
+
+        // If switching to a method that doesn't support body, show a different tab
+        if (!supportsBody && requestTabs.getSelectedIndex() == 3) {
+            requestTabs.setSelectedIndex(0);
+        }
     }
 
     private String getStatusText(int statusCode) {

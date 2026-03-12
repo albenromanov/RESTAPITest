@@ -1,95 +1,81 @@
 # REST API Tester
 
-A Java Swing-based REST API testing application that allows you to send HTTP requests and view responses.
+A robust, Java Swing-based REST API testing application that allows you to easily simulate and analyze HTTP requests and responses. Designed as a lightweight desktop alternative to full-featured tools like Postman or Insomnia.
 
-## Features
+## 🚀 Features
 
-- **HTTP Methods**: Supports GET, POST, PUT, DELETE, PATCH, HEAD, and OPTIONS
-- **Custom Headers**: Add multiple custom headers to your requests
-- **Request Body**: Send JSON or other data in the request body
-- **Response Viewer**: View formatted responses with status codes and response times
-- **JSON Formatting**: Automatic JSON response formatting for better readability
-- **User-Friendly GUI**: Clean and intuitive graphical interface
+### Core Capabilities
+- **Comprehensive HTTP Methods**: Supports GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, CONNECT, and TRACE.
+- **Dynamic Request Configuration**:
+  - **Query Parameters**: Easily add, edit, and manage query strings.
+  - **Custom Headers**: Send specific request headers.
+  - **Authentication**: Built-in support for Basic Auth and Bearer Token authentication.
+  - **Environment Variables**: Define dynamic variables injected via the `{{variableName}}` syntax throughout your URLs, headers, and body.
+  - **Request Body**: Edit raw request payloads (JSON, text) for POST, PUT, and PATCH methods. Automatically disables the editor for unsupported methods.
 
-## Requirements
+### Execution & Response
+- **Background Execution**: Keep the UI responsive while waiting for server responses via asynchronous `SwingWorker` threads.
+- **Response Analysis**:
+  - View explicit, color-coded HTTP status codes and response times.
+  - Formatted JSON response bodies for optimal readability.
+  - Dedicated tab to inspect response headers.
+- **Convenience Tools**:
+  - **Copy Response**: Instantly copy the full response payload to your system clipboard.
+  - **cURL Export**: Convert any configured request into a valid shell `cURL` command and copy it to the clipboard.
 
+### Request Management & History
+- **Saved Requests**: Bookmark and name your frequently-used requests.
+- **History Tracking**:
+  - Tracks specific history per saved request.
+  - Maintains an aggregate global history of all executed requests.
+  - Click on any historical execution to reload its parameters completely.
+  - Edit or delete Saved requests, and manage the History log to clear clutter.
+
+---
+
+## 🛠 Compilation and Usage
+
+### Requirements
 - Java 8 or higher
-- No external dependencies required (uses built-in Java Swing and HttpURLConnection)
+- No external dependencies/libraries. The project relies purely on standard Java `javax.swing.*` and `java.net.HttpURLConnection`.
 
-## Compilation
-
-### Using javac (Command Line)
+### Compiling on the Command Line
 
 ```bash
-cd rest-api-tester/src/main/java
+# Navigate to the source folder
+cd src/main/java
+
+# Compile the file
 javac com/apitester/RestApiTester.java
 ```
 
-### Using a Build Tool
-
-You can also integrate this into a Maven or Gradle project if desired.
-
-## Running the Application
-
-### From Command Line
+### Running the Application
 
 ```bash
-cd rest-api-tester/src/main/java
+# Run the compiled Main class
 java com.apitester.RestApiTester
 ```
 
-### Create JAR File
-
+Alternatively, pack it into an executable JAR:
 ```bash
-cd rest-api-tester/src/main/java
-javac com/apitester/RestApiTester.java
 jar cfe RestApiTester.jar com.apitester.RestApiTester com/apitester/RestApiTester.class
 java -jar RestApiTester.jar
 ```
 
-## Usage
+---
 
-1. **Select HTTP Method**: Choose from GET, POST, PUT, DELETE, etc.
-2. **Enter URL**: Type the API endpoint URL
-3. **Add Headers** (optional): 
-   - Go to the Headers tab
-   - Enter key-value pairs
-   - Click "Add Header" for more rows
-4. **Add Request Body** (optional):
-   - Go to the Body tab
-   - Enter your JSON or other data
-5. **Click Send**: The response will appear in the Response section
-6. **View Results**: Check the status code, response time, and formatted response body
+## 📖 Quick Guide
 
-## Example Usage
-
-The application comes pre-configured with a sample request to JSONPlaceholder API:
-- URL: `https://jsonplaceholder.typicode.com/posts/1`
-- Method: GET
-
-You can test it immediately by clicking the "Send" button.
-
-### Testing POST Request
-
-1. Change method to POST
-2. URL: `https://jsonplaceholder.typicode.com/posts`
-3. Body tab:
-```json
-{
-  "title": "foo",
-  "body": "bar",
-  "userId": 1
-}
-```
-4. Click Send
-
-## Features in Detail
-
-- **Status Display**: Shows HTTP status code with color coding (green for 2xx, red for 4xx/5xx)
-- **Response Time**: Displays how long the request took in milliseconds
-- **JSON Formatting**: Automatically formats JSON responses for better readability
-- **Error Handling**: Displays error messages if the request fails
+1. **Set Up the Request**:  
+   Select a method from the dropdown and paste your URL.
+2. **Add Parameters / Headers / Auth**:  
+   Switch through the tabs in the **Request** pane to add key/value data.
+3. **Use Environment Variables (Optional)**:
+   Add variables in the **Env** tab like `userId = 1`. Then use them in endpoints like `https://api.example.com/users/{{userId}}`.
+4. **Execute**:  
+   Click the **Send** button. View the data populate in the **Response** pane.
+5. **Save State**:  
+   Click the **Save** button, assign a description, and the request is safely bookmarked along with its future executed histories.
 
 ## License
-
-Free to use and modify.
+Free to use, modify, and distribute.
