@@ -848,7 +848,6 @@ public class RestApiTester extends JFrame {
             StringBuilder formatted = new StringBuilder();
             int indent = 0;
             boolean inString = false;
-            boolean justOpened = false;
 
             for (int i = 0; i < json.length(); i++) {
                 char c = json.charAt(i);
@@ -863,26 +862,27 @@ public class RestApiTester extends JFrame {
                     if (c == '{' || c == '[') {
                         formatted.append(c);
                         indent++;
-                        justOpened = true;
+                        formatted.append('\n').append("  ".repeat(Math.max(0, indent)));
                     } else if (c == '}' || c == ']') {
                         indent--;
+                        while (formatted.length() > 0 && Character.isWhitespace(formatted.charAt(formatted.length() - 1))) {
+                            formatted.deleteCharAt(formatted.length() - 1);
+                        }
+                        if (formatted.length() > 0 && (formatted.charAt(formatted.length() - 1) == '{' || formatted.charAt(formatted.length() - 1) == '[')) {
+                            // Empty object or array, just append the closing char
+                        } else {
+                            formatted.append('\n').append("  ".repeat(Math.max(0, indent)));
+                        }
                         formatted.append(c);
                     } else if (c == ',') {
                         formatted.append(c);
-                        justOpened = false;
+                        formatted.append('\n').append("  ".repeat(Math.max(0, indent)));
                     } else if (c == ':') {
                         formatted.append(c).append(' ');
-                    } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                    } else if (Character.isWhitespace(c)) {
                         // Skip whitespace outside strings
                     } else {
                         formatted.append(c);
-                        justOpened = false;
-                    }
-
-                    if (!justOpened && (c == '{' || c == '[')) {
-                        formatted.append('\n').append("  ".repeat(indent));
-                    } else if (c == ',' || c == ':') {
-                        formatted.append(' ');
                     }
                 } else {
                     formatted.append(c);
